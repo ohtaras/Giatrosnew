@@ -235,7 +235,7 @@ def show_help():
 """)
 
 # ── Header ─────────────────────────────────────────────────
-st.title("🩺 Giatros v8 — MEXC AI Signal Bot")
+st.title("📈 MEXC AI Signal Bot")
 running = bot_running()
 c1, c2, c3, c4 = st.columns([2, 2, 2, 1])
 c1.metric("Κατάσταση",  "🟢 Τρέχει" if running else "🔴 Παύση")
