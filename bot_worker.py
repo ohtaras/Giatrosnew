@@ -22,12 +22,15 @@ def today_str():
 
 BASE = "https://contract.mexc.com"
 
-LOG_FILE    = "/tmp/bot_log.txt"
-TRADES_FILE = "/tmp/bot_trades.json"
-OPEN_FILE   = "/tmp/bot_open_trades.json"
-CONFIG_FILE = "/tmp/bot_config.json"
-STOP_FILE   = "/tmp/bot_stop"
-MEMORY_DB   = "/tmp/mexc_memory.db"
+DATA_DIR    = "/data"
+os.makedirs(DATA_DIR, exist_ok=True)
+
+LOG_FILE    = "/data/bot_log.txt"
+TRADES_FILE = "/data/bot_trades.json"
+OPEN_FILE   = "/data/bot_open_trades.json"
+CONFIG_FILE = "/data/bot_config.json"
+STOP_FILE   = "/tmp/bot_stop"        # ephemeral: always starts running after restart
+MEMORY_DB   = "/data/mexc_memory.db"
 
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN", "").strip()
 TELEGRAM_CHAT  = os.environ.get("TELEGRAM_CHAT", "").strip()

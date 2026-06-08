@@ -30,10 +30,10 @@ if not _worker_alive():
     with open(_PID_FILE, "w") as f:
         f.write(str(proc.pid))
 
-LOG_FILE       = "/tmp/bot_log.txt"
-TRADES_FILE    = "/tmp/bot_trades.json"
-OPEN_FILE      = "/tmp/bot_open_trades.json"
-CONFIG_FILE    = "/tmp/bot_config.json"
+LOG_FILE       = "/data/bot_log.txt"
+TRADES_FILE    = "/data/bot_trades.json"
+OPEN_FILE      = "/data/bot_open_trades.json"
+CONFIG_FILE    = "/data/bot_config.json"
 STOP_FILE      = "/tmp/bot_stop"
 
 ALL_PAIRS = ["NEAR_USDT","BTC_USDT","ETH_USDT","SOL_USDT",
