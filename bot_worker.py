@@ -37,7 +37,7 @@ TELEGRAM_CHAT  = os.environ.get("TELEGRAM_CHAT", "").strip()
 
 DEFAULT_CONFIG = {
     "pairs":    ["NEAR_USDT","BTC_USDT","ETH_USDT","SOL_USDT",
-                 "BNB_USDT","XRP_USDT","DOGE_USDT","ADA_USDT"],
+                 "BNB_USDT","XRP_USDT","DOGE_USDT","ADA_USDT"],  # default 8 — χρήστης μπορεί να αλλάξει από UI
     "interval": 60,
     "tp_pct":   1.5,
     "sl_pct":   1.0,

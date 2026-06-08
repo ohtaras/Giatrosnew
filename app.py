@@ -36,8 +36,19 @@ OPEN_FILE      = "/data/bot_open_trades.json"
 CONFIG_FILE    = "/data/bot_config.json"
 STOP_FILE      = "/tmp/bot_stop"
 
-ALL_PAIRS = ["NEAR_USDT","BTC_USDT","ETH_USDT","SOL_USDT",
-             "BNB_USDT","XRP_USDT","DOGE_USDT","ADA_USDT"]
+ALL_PAIRS = [
+    # Majors
+    "BTC_USDT","ETH_USDT","BNB_USDT","XRP_USDT","SOL_USDT",
+    # Large caps
+    "ADA_USDT","DOGE_USDT","TRX_USDT","LTC_USDT","AVAX_USDT",
+    "DOT_USDT","LINK_USDT","ATOM_USDT","UNI_USDT","NEAR_USDT",
+    # Mid caps
+    "INJ_USDT","ARB_USDT","OP_USDT","APT_USDT","SUI_USDT",
+    "ICP_USDT","FIL_USDT","AAVE_USDT","GRT_USDT","IMX_USDT",
+    "STX_USDT","SEI_USDT","WLD_USDT","JUP_USDT","PENDLE_USDT",
+    # Meme / high-vol
+    "PEPE_USDT","WIF_USDT","BONK_USDT","FLOKI_USDT","SHIB_USDT",
+]
 
 def bot_running():
     return not os.path.exists(STOP_FILE)
