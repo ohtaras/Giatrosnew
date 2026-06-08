@@ -9,7 +9,7 @@ import sys
 import time
 import streamlit as st
 
-st.set_page_config(page_title="MEXC AI Signal Bot", page_icon="📈", layout="wide")
+st.set_page_config(page_title="Giatros v8", page_icon="🩺", layout="wide")
 
 # ── Auto-launch worker με το ίδιο Python (venv-safe) ───────
 _PID_FILE = "/tmp/worker_pid"
@@ -235,7 +235,7 @@ def show_help():
 """)
 
 # ── Header ─────────────────────────────────────────────────
-st.title("📈 MEXC AI Signal Bot")
+st.title("🩺 Giatros v8 — MEXC AI Signal Bot")
 running = bot_running()
 c1, c2, c3, c4 = st.columns([2, 2, 2, 1])
 c1.metric("Κατάσταση",  "🟢 Τρέχει" if running else "🔴 Παύση")
