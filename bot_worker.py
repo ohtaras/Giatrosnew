@@ -813,9 +813,13 @@ def ai_select_and_emit(pairs_data, mkt):
         add_log(f"  Claude: REJECTED {pair} — {reason}")
         return
 
+    entry_price = float(best.get("price", 0) or 0)
+    if entry_price <= 0:
+        add_log(f"  AI: {pair} score={best_score}/100 αλλά invalid price=0 → NO TRADE")
+        return
+
     now = time.time()
     sig_id = f"{pair}_{int(now)}"
-    entry_price = float(best.get("price", 0) or 0)
     trade_direction = direction or ("LONG" if best.get("raw_signal") == "ANODOS" else "SHORT")
     pattern_key = best.get("pattern_key", "")
 
@@ -855,11 +859,17 @@ def ai_select_and_emit(pairs_data, mkt):
 # ── Έλεγχος ανοιχτών θέσεων: κλείσιμο σε TP/SL, καταγραφή & μνήμη ──
 def check_open_trades(trades, tp_pct, sl_pct):
     for pair in list(paper_trades.keys()):
+      try:
         pt = paper_trades[pair]
+        entry = pt["entry"]; direction = pt["direction"]
+        if entry <= 0:
+            add_log(f"  ⚠️ {pair} άκυρη θέση (entry=0) → ακύρωση")
+            del paper_trades[pair]
+            save_open_trades()
+            continue
         price = get_price(pair)
         if price <= 0:
             continue
-        entry = pt["entry"]; direction = pt["direction"]
         pct = (price-entry)/entry*100 if direction == "LONG" else (entry-price)/entry*100
 
         if pct >= tp_pct:
@@ -900,6 +910,8 @@ def check_open_trades(trades, tp_pct, sl_pct):
             failed_move[pair] = {"direction": direction, "price": entry, "time": time.time(), "result": "ZIMIA"}
         del paper_trades[pair]
         save_open_trades()
+      except Exception as e:
+        add_log(f"  TRADE CHECK ERR {pair}: {e}")
 
 # ── Εκκίνηση & main loop (24/7) ────────────────────────────
 init_db()
