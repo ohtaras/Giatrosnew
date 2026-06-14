@@ -20,6 +20,14 @@ def now_str():
 def today_str():
     return datetime.now(TZ).strftime("%Y-%m-%d")
 
+def fmt_price(p):
+    """Δυναμικά δεκαδικά ψηφία ώστε τιμές πολύ μικρές (π.χ. PEPE ~0.00001234) να μην εμφανίζονται ως 0.0000."""
+    p = float(p)
+    if p == 0: return "0.0000"
+    if p >= 1: return f"{p:.4f}"
+    if p >= 0.01: return f"{p:.6f}"
+    return f"{p:.8f}"
+
 BASE = "https://contract.mexc.com"
 
 DATA_DIR    = "/data"
@@ -828,7 +836,7 @@ def ai_select_and_emit(pairs_data, mkt):
         "sig_id": sig_id, "score": best_score, "pattern_key": pattern_key,
     }
     save_open_trades()
-    add_log(f"  📊 {pair} PAPER ΑΝΟΙΞΕ: {trade_direction} @ {entry_price:.4f}  "
+    add_log(f"  📊 {pair} PAPER ΑΝΟΙΞΕ: {trade_direction} @ {fmt_price(entry_price)}  "
             f"score={best_score}/100  regime={best.get('ai_label','?')}")
 
     record_observation(best, best_score, pattern_key, selected=1)
@@ -850,7 +858,7 @@ def ai_select_and_emit(pairs_data, mkt):
     telegram_send(
         f"{kdj_tag}"
         f"{arrow} — {pair} (PAPER, score={best_score}/100)\n"
-        f"Τιμή: {entry_price:.4f}  d2m={d2m:.1f}%  d30={d30:.1f}%  vol={vr:.1f}x\n"
+        f"Τιμή: {fmt_price(entry_price)}  d2m={d2m:.1f}%  d30={d30:.1f}%  vol={vr:.1f}x\n"
         f"absorption={ab}  regime={best.get('ai_label','?')}  mkt={mkt}\n"
         f"5m={best.get('trend5m','?')} 15m={best.get('trend15m','?')} 1h={best.get('trend1h','?')} 4h={best.get('trend4h','?')}\n"
         f"⏰ {now_str()}"
@@ -878,7 +886,7 @@ def check_open_trades(trades, tp_pct, sl_pct):
             result, result_gr = "LOSS", "ZIMIA ❌"
         else:
             el = (time.time()-pt["entry_ts"])/60
-            add_log(f"  📊 {pair} {direction} @ {entry:.4f} | {pct:+.2f}% | {el:.0f}λ")
+            add_log(f"  📊 {pair} {direction} @ {fmt_price(entry)} | {pct:+.2f}% | {el:.0f}λ")
             continue
 
         entry_dt = datetime.fromtimestamp(pt["entry_ts"], TZ)
@@ -890,8 +898,8 @@ def check_open_trades(trades, tp_pct, sl_pct):
             "Ώρα Εξόδου":  exit_dt.strftime("%H:%M:%S"),
             "Ζεύγος":      pair,
             "Κατ/νση":     direction,
-            "Είσοδος":     f"{entry:.4f}",
-            "Έξοδος":      f"{price:.4f}",
+            "Είσοδος":     f"{fmt_price(entry)}",
+            "Έξοδος":      f"{fmt_price(price)}",
             "% P&L":       f"{pct:+.2f}%",
             "Αποτ/μα":     result_gr,
             "Διάρκεια":    f"{el_min:.0f}λ",
@@ -902,7 +910,7 @@ def check_open_trades(trades, tp_pct, sl_pct):
                        pt.get("score"), pt.get("pattern_key",""), pct, result)
         telegram_send(
             f"📊 {pair} PAPER — {result_gr}\n"
-            f"{direction} {entry:.4f} → {price:.4f}\n"
+            f"{direction} {fmt_price(entry)} → {fmt_price(price)}\n"
             f"{pct:+.2f}%   {el_min:.0f}λ   "
             f"({entry_dt.strftime('%d/%m %H:%M')} → {exit_dt.strftime('%H:%M')})"
         )
