@@ -36,6 +36,7 @@ OPEN_FILE      = "/data/bot_open_trades.json"
 CONFIG_FILE    = "/data/bot_config.json"
 STOP_FILE      = "/tmp/bot_stop"
 RESET_FILE     = "/tmp/bot_reset"
+CLEAR_TRADES_FILE = "/tmp/bot_clear_trades"
 MEMORY_DB      = "/data/mexc_memory.db"
 
 ALL_PAIRS = [
@@ -240,6 +241,18 @@ def show_help():
 @st.dialog("📝 Ημερολόγιο Αλλαγών", width="large")
 def show_journal():
     st.markdown("""
+### 21/06/2026 (συνέχεια)
+
+**Δύο ξεχωριστά κουμπιά reset** (πριν ήταν ένα συνδυαστικό):
+- **🗑️ Καθάρισμα Trades**: μηδενίζει μόνο το ιστορικό trades/ανοιχτές θέσεις,
+  η μνήμη μάθησης (AI) παραμένει άθικτη — για όταν θες απλά να "καθαρίσεις
+  την οθόνη" χωρίς να χάσεις ό,τι έχει μάθει το bot.
+- **🧠 Πλήρες Reset (+μνήμη)**: μηδενίζει trades ΚΑΙ τη μνήμη μάθησης — για
+  πλήρες restart από την αρχή.
+- Κάθε κουμπί θέλει το δικό του κουτάκι επιβεβαίωσης πριν ενεργοποιηθεί.
+
+---
+
 ### 21/06/2026
 
 **Πρόβλημα που εντοπίστηκε**: το win-rate έπεσε από 43.8% (18/06) σε 40.8%
@@ -324,7 +337,7 @@ with c5:
     if st.button("📝 Ημερολόγιο", use_container_width=True):
         show_journal()
 
-b1, b2, b3, _ = st.columns([1, 1, 1, 5])
+b1, b2, b3, b4 = st.columns([1, 1, 1.4, 1.4])
 if b1.button("▶ Εκκίνηση", type="primary", disabled=running, use_container_width=True):
     if os.path.exists(STOP_FILE):
         os.remove(STOP_FILE)
@@ -335,13 +348,25 @@ if b2.button("⏹ Παύση", disabled=not running, use_container_width=True):
     st.rerun()
 
 with b3:
-    confirm_reset = st.checkbox("Επιβεβαίωση reset")
-    if st.button("🗑️ Reset Ιστορικού", disabled=not confirm_reset, use_container_width=True):
+    confirm_clear = st.checkbox("Επιβεβαίωση")
+    if st.button("🗑️ Καθάρισμα Trades", disabled=not confirm_clear, use_container_width=True,
+                  help="Μηδενίζει μόνο το ιστορικό trades/θέσεων. Η μνήμη μάθησης (AI) ΔΕΝ αγγίζεται."):
+        for f in (TRADES_FILE, OPEN_FILE):
+            if os.path.exists(f):
+                os.remove(f)
+        open(CLEAR_TRADES_FILE, "w").close()
+        st.success("Μηδενίστηκε το ιστορικό trades. Η μνήμη μάθησης παραμένει άθικτη.")
+        st.rerun()
+
+with b4:
+    confirm_reset = st.checkbox("Επιβεβαίωση πλήρη")
+    if st.button("🧠 Πλήρες Reset (+μνήμη)", disabled=not confirm_reset, use_container_width=True,
+                  help="Μηδενίζει trades, θέσεις ΚΑΙ τη μνήμη μάθησης (AI ξεκινά από το μηδέν)."):
         for f in (TRADES_FILE, OPEN_FILE, MEMORY_DB):
             if os.path.exists(f):
                 os.remove(f)
         open(RESET_FILE, "w").close()
-        st.success("Μηδενίστηκαν οι εντολές, οι θέσεις και η μνήμη μάθησης.")
+        st.success("Μηδενίστηκαν trades, θέσεις και μνήμη μάθησης.")
         st.rerun()
 
 # ── Tabs ───────────────────────────────────────────────────
