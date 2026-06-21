@@ -203,7 +203,12 @@ def make_pattern_key(d):
     t1 = d.get("trend1h","?"); t4 = d.get("trend4h","?"); direction = d.get("direction","")
     d2 = bucket(d.get("delta_2m",0),10,-200,200); d30 = bucket(d.get("delta_30s",0),10,-200,200)
     vr = bucket(d.get("vol_ratio",1.0),1,0,50)
-    return f"{ab}|{direction}|d2={d2}|d30={d30}|vr={vr}|5={t5}|15={t15}|1h={t1}|4h={t4}"
+    bias = d.get("bias_dir","NEUTRAL")
+    # Το bias (ανοδική/πτωτική φάση αγοράς) μπαίνει στο κλειδί ώστε οι στατιστικές
+    # win-rate ενός pattern να μη μπερδεύονται ανάμεσα σε διαφορετικές φάσεις αγοράς —
+    # ένα pattern που κέρδιζε σε ανοδική φάση δεν πρέπει να "δανείζει" εμπιστοσύνη
+    # σε πτωτική φάση και αντίστροφα.
+    return f"{ab}|{direction}|bias={bias}|d2={d2}|d30={d30}|vr={vr}|5={t5}|15={t15}|1h={t1}|4h={t4}"
 
 def infer_trade_direction(d):
     dr = d.get("direction") or ""
@@ -423,8 +428,13 @@ def score_pair(d):
                 int(ac["structure_alignment"]) + int(ac["mtf_alignment"]) +
                 int(ac["volatility_quality"]) + int(ac["delta_sustainability"]) +
                 int(ac["continuation_after_spike"]) + ob_bonus + fr_bonus + fp_bonus + hv_bonus)
-    pen_sum = sum(int(p) for _, p in ac.get("penalties", [])); base = int(subtotal - pen_sum)
-    d_for_pattern = dict(d); d_for_pattern["direction"] = direction
+    bias_dir = bias_state.get(d.get("pair",""), {}).get("direction","NEUTRAL")
+    bias_penalty = 0
+    if (bias_dir == "BULLISH" and want == "SHORT") or (bias_dir == "BEARISH" and want == "LONG"):
+        bias_penalty = 12  # αντίθετο στη φάση της αγοράς → ποινή, όχι μόνο απουσία μπόνους
+    pen_sum = sum(int(p) for _, p in ac.get("penalties", [])) + bias_penalty
+    base = int(subtotal - pen_sum)
+    d_for_pattern = dict(d); d_for_pattern["direction"] = direction; d_for_pattern["bias_dir"] = bias_dir
     pkey = make_pattern_key(d_for_pattern); n, wr = pattern_stats(pkey)
     evidence = min(1.0, n/15.0); adj = int(round((wr-0.5)*30*evidence))
     score = int(clamp(base+adj, 0, 100))
