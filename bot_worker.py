@@ -953,6 +953,7 @@ threading.Thread(target=trend15_loop, daemon=True).start()
 while True:
     if os.path.exists(CLEAR_TRADES_FILE):
         paper_trades.clear()
+        trades.clear()
         save_trades([])
         save_open_trades()
         add_log("🗑️ ΚΑΘΑΡΙΣΜΑ: μηδενίστηκαν trades και ανοιχτές θέσεις (η μνήμη μάθησης ΔΕΝ αγγίχτηκε)")
@@ -960,11 +961,14 @@ while True:
 
     if os.path.exists(RESET_FILE):
         paper_trades.clear()
+        trades.clear()
         save_trades([])
         save_open_trades()
         try:
-            if os.path.exists(MEMORY_DB):
-                os.remove(MEMORY_DB)
+            for ext in ("", "-wal", "-shm"):
+                p = MEMORY_DB + ext
+                if os.path.exists(p):
+                    os.remove(p)
         except Exception as e:
             add_log(f"ERR reset MEMORY_DB: {e}")
         init_db()
