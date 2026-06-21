@@ -35,6 +35,8 @@ TRADES_FILE    = "/data/bot_trades.json"
 OPEN_FILE      = "/data/bot_open_trades.json"
 CONFIG_FILE    = "/data/bot_config.json"
 STOP_FILE      = "/tmp/bot_stop"
+RESET_FILE     = "/tmp/bot_reset"
+MEMORY_DB      = "/data/mexc_memory.db"
 
 ALL_PAIRS = [
     # Majors
@@ -322,7 +324,7 @@ with c5:
     if st.button("📝 Ημερολόγιο", use_container_width=True):
         show_journal()
 
-b1, b2, _ = st.columns([1, 1, 6])
+b1, b2, b3, _ = st.columns([1, 1, 1, 5])
 if b1.button("▶ Εκκίνηση", type="primary", disabled=running, use_container_width=True):
     if os.path.exists(STOP_FILE):
         os.remove(STOP_FILE)
@@ -331,6 +333,16 @@ if b1.button("▶ Εκκίνηση", type="primary", disabled=running, use_conta
 if b2.button("⏹ Παύση", disabled=not running, use_container_width=True):
     open(STOP_FILE, "w").close()
     st.rerun()
+
+with b3:
+    confirm_reset = st.checkbox("Επιβεβαίωση reset")
+    if st.button("🗑️ Reset Ιστορικού", disabled=not confirm_reset, use_container_width=True):
+        for f in (TRADES_FILE, OPEN_FILE, MEMORY_DB):
+            if os.path.exists(f):
+                os.remove(f)
+        open(RESET_FILE, "w").close()
+        st.success("Μηδενίστηκαν οι εντολές, οι θέσεις και η μνήμη μάθησης.")
+        st.rerun()
 
 # ── Tabs ───────────────────────────────────────────────────
 tab_log, tab_trades = st.tabs(["📋 Live Log", "📊 Paper Trades"])

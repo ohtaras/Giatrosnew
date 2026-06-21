@@ -38,6 +38,7 @@ TRADES_FILE = "/data/bot_trades.json"
 OPEN_FILE   = "/data/bot_open_trades.json"
 CONFIG_FILE = "/data/bot_config.json"
 STOP_FILE   = "/tmp/bot_stop"        # ephemeral: always starts running after restart
+RESET_FILE  = "/tmp/bot_reset"
 MEMORY_DB   = "/data/mexc_memory.db"
 
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN", "").strip()
@@ -949,6 +950,19 @@ for _pair in TREND_WATCH_PAIRS:
 threading.Thread(target=trend15_loop, daemon=True).start()
 
 while True:
+    if os.path.exists(RESET_FILE):
+        paper_trades.clear()
+        save_trades([])
+        save_open_trades()
+        try:
+            if os.path.exists(MEMORY_DB):
+                os.remove(MEMORY_DB)
+        except Exception as e:
+            add_log(f"ERR reset MEMORY_DB: {e}")
+        init_db()
+        add_log("🗑️ RESET: μηδενίστηκαν trades, ανοιχτές θέσεις και μνήμη μάθησης")
+        os.remove(RESET_FILE)
+
     if os.path.exists(STOP_FILE):
         time.sleep(5)
         continue
