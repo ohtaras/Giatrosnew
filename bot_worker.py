@@ -69,6 +69,12 @@ INTERVAL_4H="Hour4"
 paper_trades = {}        # pair -> {direction, entry, entry_ts, sig_id, score, pattern_key}
 pair_last_selection = {}
 
+# ── Circuit breaker: σταματά νέα trades μετά από σερί ζημιών ──
+LOSS_STREAK_LIMIT = 6
+COOLDOWN_MINUTES = 45
+consecutive_losses = 0
+cooldown_until = 0.0
+
 DATA_LOCK = threading.RLock()
 LOG_LOCK  = threading.RLock()
 DB_LOCK   = threading.RLock()
@@ -788,6 +794,10 @@ def claude_approve(d, mkt):
 
 # ── AI επιλογή σήματος → άνοιγμα πραγματικής εικονικής θέσης ──
 def ai_select_and_emit(pairs_data, mkt):
+    if time.time() < cooldown_until:
+        remain = int((cooldown_until - time.time()) / 60) + 1
+        add_log(f"  AI: σε παύση (circuit breaker) — {remain}λ ακόμα")
+        return
     scored = []
     for d in pairs_data:
         score, pkey, dbg = score_pair(d)
@@ -928,6 +938,17 @@ def check_open_trades(trades, tp_pct, sl_pct):
         )
         if result == "LOSS":
             failed_move[pair] = {"direction": direction, "price": entry, "time": time.time(), "result": "ZIMIA"}
+        global consecutive_losses, cooldown_until
+        if result == "LOSS":
+            consecutive_losses += 1
+            if consecutive_losses >= LOSS_STREAK_LIMIT and time.time() >= cooldown_until:
+                cooldown_until = time.time() + COOLDOWN_MINUTES * 60
+                add_log(f"  🛑 CIRCUIT BREAKER: {consecutive_losses} συνεχόμενες ζημιές → "
+                        f"παύση νέων trades για {COOLDOWN_MINUTES}λ")
+                telegram_send(f"🛑 Circuit breaker: {consecutive_losses} συνεχόμενες ζημιές.\n"
+                              f"Παύση νέων trades για {COOLDOWN_MINUTES} λεπτά.")
+        else:
+            consecutive_losses = 0
         del paper_trades[pair]
         save_open_trades()
       except Exception as e:
@@ -956,6 +977,8 @@ while True:
         trades.clear()
         save_trades([])
         save_open_trades()
+        consecutive_losses = 0
+        cooldown_until = 0.0
         add_log("🗑️ ΚΑΘΑΡΙΣΜΑ: μηδενίστηκαν trades και ανοιχτές θέσεις (η μνήμη μάθησης ΔΕΝ αγγίχτηκε)")
         os.remove(CLEAR_TRADES_FILE)
 
@@ -964,6 +987,8 @@ while True:
         trades.clear()
         save_trades([])
         save_open_trades()
+        consecutive_losses = 0
+        cooldown_until = 0.0
         try:
             for ext in ("", "-wal", "-shm"):
                 p = MEMORY_DB + ext
