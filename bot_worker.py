@@ -437,10 +437,7 @@ def score_pair(d):
                 int(ac["volatility_quality"]) + int(ac["delta_sustainability"]) +
                 int(ac["continuation_after_spike"]) + ob_bonus + fr_bonus + fp_bonus + hv_bonus)
     bias_dir = bias_state.get(d.get("pair",""), {}).get("direction","NEUTRAL")
-    bias_penalty = 0
-    if (bias_dir == "BULLISH" and want == "SHORT") or (bias_dir == "BEARISH" and want == "LONG"):
-        bias_penalty = 12  # αντίθετο στη φάση της αγοράς → ποινή, όχι μόνο απουσία μπόνους
-    pen_sum = sum(int(p) for _, p in ac.get("penalties", [])) + bias_penalty
+    pen_sum = sum(int(p) for _, p in ac.get("penalties", []))
     base = int(subtotal - pen_sum)
     d_for_pattern = dict(d); d_for_pattern["direction"] = direction; d_for_pattern["bias_dir"] = bias_dir
     pkey = make_pattern_key(d_for_pattern); n, wr = pattern_stats(pkey)
@@ -816,7 +813,27 @@ def ai_select_and_emit(pairs_data, mkt):
         trace_parts.append(f"{x.get('pair')}={ps}{suff}")
     add_log(f"  AI_TRACE rank: {' > '.join(trace_parts)}")
 
-    best = scored_sorted[0]
+    # Σκληρό μπλοκ: όταν η αγορά έχει ξεκάθαρη φάση (BULLISH/BEARISH), δεν ανοίγουμε
+    # trade αντίθετο στη φάση — δεν αρκεί απλά να είναι σπανιότερο (ποινή στο score),
+    # τα δεδομένα δείχνουν ότι σχεδόν πάντα χάνει (π.χ. LONG σε bearish αγορά).
+    best = None
+    blocked_counter_bias = []
+    for cand in scored_sorted:
+        c_pair = cand.get("pair", "?")
+        c_dir = cand.get("direction", "")
+        c_bias_dir = bias_state.get(c_pair, {}).get("direction", "NEUTRAL")
+        counter_bias = (c_bias_dir == "BULLISH" and c_dir == "SHORT") or (c_bias_dir == "BEARISH" and c_dir == "LONG")
+        if counter_bias:
+            blocked_counter_bias.append(f"{c_pair}={int(cand.get('score',0) or 0)}")
+            continue
+        best = cand
+        break
+    if best is None:
+        add_log(f"  AI: NO TRADE (όλοι οι υποψήφιοι αντίθετοι στη φάση αγοράς) [{', '.join(blocked_counter_bias)}]")
+        return
+    if blocked_counter_bias:
+        add_log(f"  AI: μπλοκαρισμένοι (counter-bias) πριν τον επιλεγμένο: {', '.join(blocked_counter_bias)}")
+
     best_score = int(best.get("score", 0) or 0)
     pair = best.get("pair", "?")
     direction = best.get("direction", "")
