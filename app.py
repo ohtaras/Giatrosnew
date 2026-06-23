@@ -7,7 +7,11 @@ import os
 import subprocess
 import sys
 import time
+from datetime import datetime
+from zoneinfo import ZoneInfo
 import streamlit as st
+
+TZ = ZoneInfo("Europe/Athens")
 
 st.set_page_config(page_title="Giatros v8", page_icon="🩺", layout="wide")
 
@@ -241,6 +245,14 @@ def show_help():
 @st.dialog("📝 Ημερολόγιο Αλλαγών", width="large")
 def show_journal():
     st.markdown("""
+### 23/06/2026 (συνέχεια)
+
+Προστέθηκε στήλη **"Ώρα Εισόδου"** (ώρα Ελλάδας) στον πίνακα "Ανοικτές
+Θέσεις", ώστε να φαίνεται πότε άνοιξε κάθε ανοιχτή θέση, όχι μόνο η
+διάρκεια σε λεπτά.
+
+---
+
 ### 23/06/2026
 
 **Ανάλυση CSV (44 trades, 22-23/06)**: SHORT win-rate 77,4% (24/31), LONG
@@ -440,9 +452,11 @@ with tab_trades:
         open_rows = []
         for ot in open_trades:
             el = (now_ts - ot["time"]) / 60
+            entry_dt = datetime.fromtimestamp(ot["time"], TZ)
             open_rows.append({
                 "Ζεύγος": ot["pair"],
                 "Κατ/νση": ot["direction"],
+                "Ώρα Εισόδου": entry_dt.strftime("%d/%m %H:%M:%S"),
                 "Είσοδος": f"{ot['entry']:.4f}",
                 "Σκορ AI": ot.get("score", "—"),
                 "Διάρκεια": f"{el:.0f}λ",
