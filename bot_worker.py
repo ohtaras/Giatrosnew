@@ -69,6 +69,10 @@ INTERVAL_4H="Hour4"
 paper_trades = {}        # pair -> {direction, entry, entry_ts, sig_id, score, pattern_key}
 pair_last_selection = {}
 
+# ── Όριο ταυτόχρονων ανοιχτών θέσεων: εμποδίζει πολλά ζεύγη να ανοίξουν μαζί
+#    σε μια συσχετισμένη κίνηση αγοράς, πριν προλάβει να αντιδράσει ο circuit breaker ──
+MAX_OPEN_POSITIONS = 3
+
 # ── Circuit breaker: σταματά νέα trades μετά από σερί ζημιών ──
 LOSS_STREAK_LIMIT = 6
 COOLDOWN_MINUTES = 45
@@ -885,6 +889,10 @@ def ai_select_and_emit(pairs_data, mkt):
             return
     if pair in paper_trades:
         add_log(f"  AI: {pair} έχει ήδη ανοιχτή θέση → NO TRADE (score={best_score}/100)")
+        return
+    if len(paper_trades) >= MAX_OPEN_POSITIONS:
+        add_log(f"  AI: όριο ταυτόχρονων θέσεων ({MAX_OPEN_POSITIONS}) → NO TRADE "
+                 f"(best {pair} score={best_score}/100, ανοιχτές: {', '.join(paper_trades.keys())})")
         return
     ok, why = selection_gate(pair)
     if not ok:
