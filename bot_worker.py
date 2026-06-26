@@ -6,7 +6,7 @@ KDJ/MACD/EMA confirmation, SQLite pattern-learning) με πραγματικό pa
 (άνοιγμα/κλείσιμο εικονικών θέσεων με TP/SL — όπως στο παλιό bot).
 Τρέχει 24/7 ανεξάρτητα· γράφει log/trades σε αρχεία που διαβάζει το app.py.
 """
-import json, time, threading, statistics, os, sqlite3
+import json, time, threading, statistics, os, sqlite3, random
 from datetime import datetime
 from zoneinfo import ZoneInfo
 from urllib.request import urlopen, Request
@@ -74,6 +74,15 @@ LOSS_STREAK_LIMIT = 6
 COOLDOWN_MINUTES = 45
 consecutive_losses = 0
 cooldown_until = 0.0
+
+# ── Μνήμη μοτίβων: πόσο "βαρύνει" η εμπειρία στο σκορ ──
+EVIDENCE_HALF_N = 15   # στα Ν δείγματα η εμπιστοσύνη φτάνει το 50% — συνεχίζει να ανεβαίνει μετά, ποτέ δεν παγώνει
+
+# ── Exploration: σπάνια δοκιμή πατterns με χαμηλό σκορ, για να μη "μαυρολιστάρονται" μόνιμα ──
+EXPLORATION_PROB = 0.05     # 5% πιθανότητα ανά κύκλο να δοκιμάσουμε κάτι κάτω από το όριο
+EXPLORE_MAX_N = 30          # μόνο για patterns με λιγότερα από τόσα δείγματα (ακόμα "άγνωστα")
+EXPLORE_MIN_SCORE = 60      # ελάχιστο βασικό σκορ για να αξίζει η δοκιμή (όχι τελείως άσχετο σήμα)
+EXPLORE_MAX_PER_DAY = 3
 
 DATA_LOCK = threading.RLock()
 LOG_LOCK  = threading.RLock()
@@ -239,7 +248,8 @@ def trend_matches(trend, direction):
         return 1 if trend == "DOWN" else (-1 if trend == "UP" else 0)
     return 0
 
-def pattern_stats(pattern_key):
+def pattern_counts(pattern_key):
+    """Ωμός αριθμός δειγμάτων/νικών/ζημιών για ένα pattern_key (χωρίς Laplace smoothing) — για εμφάνιση."""
     with DB_LOCK:
         con = sqlite3.connect(MEMORY_DB, timeout=10, check_same_thread=False)
         try:
@@ -247,10 +257,14 @@ def pattern_stats(pattern_key):
                               "FROM outcomes WHERE pattern_key=? AND result_label IS NOT NULL", (pattern_key,))
             row = cur.fetchone() or (0, 0)
             n = int(row[0] or 0); wins = int(row[1] or 0)
-            if n <= 0: return 0, 0.5
-            return n, (wins+1)/(n+2)
+            return n, wins, n - wins
         finally:
             con.close()
+
+def pattern_stats(pattern_key):
+    n, wins, _ = pattern_counts(pattern_key)
+    if n <= 0: return 0, 0.5
+    return n, (wins+1)/(n+2)
 
 def record_observation(d, score, pattern_key, selected=0):
     ts = int(time.time())
@@ -284,6 +298,19 @@ def record_outcome(sig_id, entry_ts, pair, direction, entry_price, score, patter
             con.commit()
         finally:
             con.close()
+
+def explore_gate():
+    today = today_str()
+    last_day = db_get_meta("explore_day",""); cnt = int(db_get_meta("explore_count","0") or 0)
+    if last_day != today: cnt = 0
+    return cnt < EXPLORE_MAX_PER_DAY
+
+def mark_explored_today():
+    today = today_str()
+    last_day = db_get_meta("explore_day",""); cnt = int(db_get_meta("explore_count","0") or 0)
+    if last_day != today: cnt = 0
+    cnt += 1
+    db_set_meta("explore_day", today); db_set_meta("explore_count", str(cnt))
 
 def selection_gate(pair=""):
     now = time.time(); today = today_str()
@@ -441,7 +468,9 @@ def score_pair(d):
     base = int(subtotal - pen_sum)
     d_for_pattern = dict(d); d_for_pattern["direction"] = direction; d_for_pattern["bias_dir"] = bias_dir
     pkey = make_pattern_key(d_for_pattern); n, wr = pattern_stats(pkey)
-    evidence = min(1.0, n/15.0); adj = int(round((wr-0.5)*30*evidence))
+    # Ασυμπτωτική εμπιστοσύνη: δεν "παγώνει" ποτέ στο 1.0 — συνεχίζει να πλησιάζει
+    # όσα περισσότερα δείγματα μαζεύονται, ώστε 200 δοκιμές να μετράνε παραπάνω από 15.
+    evidence = n/(n+EVIDENCE_HALF_N); adj = int(round((wr-0.5)*30*evidence))
     score = int(clamp(base+adj, 0, 100))
     dbg = {"base": base, "adj": adj, "n": n, "wr": wr, "ai": ac, "absorption_base": absorption_base,
            "subtotal": subtotal, "pen_sum": pen_sum}
@@ -840,11 +869,20 @@ def ai_select_and_emit(pairs_data, mkt):
     bias = bias_state.get(pair, {}); bias_dir = bias.get("direction", "NEUTRAL")
     bias_aligned = (direction == "LONG" and bias_dir == "BULLISH") or (direction == "SHORT" and bias_dir == "BEARISH")
     effective_min = 80 if bias_aligned else SCORE_MIN
+    explored = False
     if best_score < effective_min:
-        lbl = best.get("score_dbg", {}).get("ai", {}).get("label", "?")
-        bias_note = f" BIAS={bias_dir}" if bias_aligned else ""
-        add_log(f"  AI: NO TRADE (best {pair} score={best_score}/100 <{effective_min}{bias_note}) regime={lbl}")
-        return
+        n_best, _, _ = pattern_counts(best.get("pattern_key",""))
+        if (best_score >= EXPLORE_MIN_SCORE and n_best < EXPLORE_MAX_N
+                and explore_gate() and random.random() < EXPLORATION_PROB):
+            explored = True
+            mark_explored_today()
+            add_log(f"  🔬 EXPLORATION: δοκιμή {pair} score={best_score}/100 (pattern n={n_best}) "
+                     f"παρόλο που <{effective_min} — μάζεμα δεδομένων")
+        else:
+            lbl = best.get("score_dbg", {}).get("ai", {}).get("label", "?")
+            bias_note = f" BIAS={bias_dir}" if bias_aligned else ""
+            add_log(f"  AI: NO TRADE (best {pair} score={best_score}/100 <{effective_min}{bias_note}) regime={lbl}")
+            return
     if pair in paper_trades:
         add_log(f"  AI: {pair} έχει ήδη ανοιχτή θέση → NO TRADE (score={best_score}/100)")
         return
@@ -872,10 +910,11 @@ def ai_select_and_emit(pairs_data, mkt):
 
     paper_trades[pair] = {
         "direction": trade_direction, "entry": entry_price, "entry_ts": now,
-        "sig_id": sig_id, "score": best_score, "pattern_key": pattern_key,
+        "sig_id": sig_id, "score": best_score, "pattern_key": pattern_key, "explored": explored,
     }
     save_open_trades()
-    add_log(f"  📊 {pair} PAPER ΑΝΟΙΞΕ: {trade_direction} @ {fmt_price(entry_price)}  "
+    explore_tag = "🔬 EXPLORATION " if explored else ""
+    add_log(f"  📊 {explore_tag}{pair} PAPER ΑΝΟΙΞΕ: {trade_direction} @ {fmt_price(entry_price)}  "
             f"score={best_score}/100  regime={best.get('ai_label','?')}")
 
     record_observation(best, best_score, pattern_key, selected=1)
@@ -896,6 +935,7 @@ def ai_select_and_emit(pairs_data, mkt):
     arrow = "🟢 LONG" if trade_direction == "LONG" else "🔴 SHORT"
     telegram_send(
         f"{kdj_tag}"
+        f"{'🔬 EXPLORATION — δοκιμή χαμηλού σκορ για μάθηση' + chr(10) if explored else ''}"
         f"{arrow} — {pair} (PAPER, score={best_score}/100)\n"
         f"Τιμή: {fmt_price(entry_price)}  d2m={d2m:.1f}%  d30={d30:.1f}%  vol={vr:.1f}x\n"
         f"absorption={ab}  regime={best.get('ai_label','?')}  mkt={mkt}\n"
@@ -931,6 +971,11 @@ def check_open_trades(trades, tp_pct, sl_pct):
         entry_dt = datetime.fromtimestamp(pt["entry_ts"], TZ)
         exit_dt  = datetime.now(TZ)
         el_min   = (exit_dt - entry_dt).total_seconds()/60
+
+        record_outcome(pt["sig_id"], int(pt["entry_ts"]), pair, direction, entry,
+                       pt.get("score"), pt.get("pattern_key",""), pct, result)
+        p_n, p_wins, p_losses = pattern_counts(pt.get("pattern_key",""))
+
         trades.append({
             "Ημερομηνία":  entry_dt.strftime("%d/%m/%Y"),
             "Ώρα Εισόδου": entry_dt.strftime("%H:%M:%S"),
@@ -942,11 +987,12 @@ def check_open_trades(trades, tp_pct, sl_pct):
             "% P&L":       f"{pct:+.2f}%",
             "Αποτ/μα":     result_gr,
             "Διάρκεια":    f"{el_min:.0f}λ",
+            "Σκορ Εισόδου": pt.get("score", "—"),
+            "Δείγματα Pattern": p_n,
+            "Νίκες/Ζημίες Pattern": f"{p_wins}/{p_losses}",
         })
         save_trades(trades)
         add_log(f"  📊 {pair} {direction} {pct:+.2f}% {result_gr}")
-        record_outcome(pt["sig_id"], int(pt["entry_ts"]), pair, direction, entry,
-                       pt.get("score"), pt.get("pattern_key",""), pct, result)
         telegram_send(
             f"📊 {pair} PAPER — {result_gr}\n"
             f"{direction} {fmt_price(entry)} → {fmt_price(price)}\n"
